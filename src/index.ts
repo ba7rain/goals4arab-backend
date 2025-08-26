@@ -1,7 +1,3 @@
-// Minimal Node declarations to avoid needing @types/node during build
-declare function require(name: string): any;
-declare const process: any;
-
 // ===== Goals4Arab Backend (Sportmonks v3) =====
 // CommonJS-friendly TypeScript (works with your current tsconfig)
 // Run with: npm run dev
