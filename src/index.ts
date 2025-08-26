@@ -1,6 +1,6 @@
 // ===== Goals4Arab Backend (Sportmonks v3) =====
-// CommonJS-friendly TypeScript (works with your current tsconfig)
-// Run with: npm run dev
+// Works with Fastify v5 and @fastify/cors v10
+// Start locally: npm run dev
 
 const Fastify = require('fastify');
 const cors = require('@fastify/cors');
@@ -9,7 +9,7 @@ require('dotenv').config();
 
 const app = Fastify({ logger: true });
 
-// ------- tiny in-memory cache to protect your API quota -------
+// ---------------- tiny in-memory cache ----------------
 type CacheEntry = { exp: number; data: any };
 const cache: Record<string, CacheEntry> = {};
 function put(k: string, data: any, ttlMs = 5000) {
@@ -20,7 +20,7 @@ function get(k: string) {
   return v && v.exp > Date.now() ? v.data : null;
 }
 
-// ------- helpers to normalize Sportmonks fixtures -------
+// ------------- helpers to normalize fixtures -------------
 function currentScore(scores: any[]) {
   let home = 0, away = 0;
   if (Array.isArray(scores)) {
@@ -68,7 +68,7 @@ function sortByKickoff(list: any[]) {
   );
 }
 
-// ------- main server startup -------
+// ------------------- start server -------------------
 async function start() {
   await app.register(cors, { origin: true });
 
@@ -77,14 +77,14 @@ async function start() {
   const API_KEY = process.env.API_KEY;
 
   if (!API_KEY) {
-    app.log.error('Missing API_KEY in .env');
+    app.log.error('Missing API_KEY in env');
     process.exit(1);
   }
 
-  // Health check
+  // Health
   app.get('/health', async () => ({ ok: true }));
 
-  // --- Today’s fixtures (scheduled/finished today) ---
+  // ---------- A) Today's fixtures ----------
   app.get('/api/fixtures/today', async () => {
     const c = get('fixtures:today:simple');
     if (c) return c;
@@ -103,7 +103,7 @@ async function start() {
     return response;
   });
 
-  // --- Live now (only matches in play) ---
+  // ---------- B) Live now (in play only) ----------
   app.get('/api/live', async () => {
     const c = get('live:simple');
     if (c) return c;
@@ -121,7 +121,82 @@ async function start() {
     return response;
   });
 
-  // --- (optional) fixture details by ID, still raw for now ---
+  // ---------- C) Fixtures by specific date ----------
+  // Example: /api/fixtures/date/2025-08-27
+  app.get('/api/fixtures/date/:date', async (req: any) => {
+    const { date } = req.params; // YYYY-MM-DD
+    const key = `fixtures:date:${date}`;
+    const c = get(key);
+    if (c) return c;
+
+    const url =
+      `${API_BASE}/fixtures/date/${date}` +
+      `?api_token=${API_KEY}&include=participants;scores&locale=ar`;
+
+    const res = await request(url);
+    const raw = await res.body.json();
+    const fixtures = sortByKickoff((raw?.data ?? []).map(mapFixture));
+
+    const response = { date_utc: date, fixtures };
+    put(key, response, 60_000);
+    return response;
+  });
+
+  // ---------- D) Tomorrow shortcut ----------
+  app.get('/api/fixtures/tomorrow', async () => {
+    const c = get('fixtures:tomorrow');
+    if (c) return c;
+
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + 1);
+    const date = d.toISOString().slice(0, 10);
+
+    const url =
+      `${API_BASE}/fixtures/date/${date}` +
+      `?api_token=${API_KEY}&include=participants;scores&locale=ar`;
+
+    const res = await request(url);
+    const raw = await res.body.json();
+    const fixtures = sortByKickoff((raw?.data ?? []).map(mapFixture));
+    const response = { date_utc: date, fixtures };
+    put('fixtures:tomorrow', response, 60_000);
+    return response;
+  });
+
+  // ---------- E) Upcoming schedule (next N days) ----------
+  // Example: /api/fixtures/upcoming?days=7  (max 14)
+  app.get('/api/fixtures/upcoming', async (req: any) => {
+    const days = Math.max(1, Math.min(14, Number(req?.query?.days ?? 7)));
+    const key = `fixtures:upcoming:${days}`;
+    const cached = get(key);
+    if (cached) return cached;
+
+    const out: any[] = [];
+    const today = new Date();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(Date.UTC(
+        today.getUTCFullYear(),
+        today.getUTCMonth(),
+        today.getUTCDate() + i
+      ));
+      const date = d.toISOString().slice(0, 10);
+
+      const url =
+        `${API_BASE}/fixtures/date/${date}` +
+        `?api_token=${API_KEY}&include=participants;scores&locale=ar`;
+
+      const res = await request(url);
+      const raw = await res.body.json();
+      const fixtures = (raw?.data ?? []).map(mapFixture);
+      if (fixtures.length) out.push({ date_utc: date, fixtures: sortByKickoff(fixtures) });
+    }
+
+    const response = { days, schedule: out };
+    put(key, response, 60_000);
+    return response;
+  });
+
+  // ---------- F) (Optional) Raw match details by ID ----------
   app.get('/api/matches/:id', async (req: any) => {
     const { id } = req.params;
     const key = `match:${id}`;
