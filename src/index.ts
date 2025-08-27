@@ -39,6 +39,7 @@ function mapFixture(fx: any) {
   const home = parts.find((p: any) => p?.meta?.location === 'home') || {};
   const away = parts.find((p: any) => p?.meta?.location === 'away') || {};
   const { home: score_home, away: score_away } = currentScore(fx?.scores || []);
+  const league_name = fx?.league?.name ?? null;
 
   const kickoffUTC = fx?.starting_at ? fx.starting_at.replace(' ', 'T') + 'Z' : null;
   const kickoffBahrain = kickoffUTC
@@ -52,7 +53,8 @@ function mapFixture(fx: any) {
   return {
     id: fx?.id,
     league_id: fx?.league_id,
-    state_id: fx?.state_id, // 1 scheduled, 2 live, etc.
+    league_name,
+    state_id: fx?.state_id,
     kickoff_utc: kickoffUTC,
     kickoff_bahrain: kickoffBahrain,
     home: { id: home?.id, name: home?.name, code: home?.short_code, logo: home?.image_path },
@@ -92,7 +94,7 @@ async function start() {
     const todayUTC = new Date().toISOString().slice(0, 10);
     const url =
       `${API_BASE}/fixtures/date/${todayUTC}` +
-      `?api_token=${API_KEY}&include=participants;scores&locale=ar`;
+      `?api_token=${API_KEY}&include=participants;league;scores&locale=ar`;
 
     const res = await request(url);
     const raw = await res.body.json();
@@ -110,7 +112,7 @@ async function start() {
 
     const url =
       `${API_BASE}/livescores/inplay` +
-      `?api_token=${API_KEY}&include=participants;scores&locale=ar`;
+      `?api_token=${API_KEY}&include=participants;league;scores&locale=ar`;
 
     const res = await request(url);
     const raw = await res.body.json();
@@ -131,7 +133,7 @@ async function start() {
 
     const url =
       `${API_BASE}/fixtures/date/${date}` +
-      `?api_token=${API_KEY}&include=participants;scores&locale=ar`;
+      `?api_token=${API_KEY}&include=participants;league;scores&locale=ar`;
 
     const res = await request(url);
     const raw = await res.body.json();
@@ -153,7 +155,7 @@ async function start() {
 
     const url =
       `${API_BASE}/fixtures/date/${date}` +
-      `?api_token=${API_KEY}&include=participants;scores&locale=ar`;
+      `?api_token=${API_KEY}&include=participants;league;scores&locale=ar`;
 
     const res = await request(url);
     const raw = await res.body.json();
@@ -183,7 +185,7 @@ async function start() {
 
       const url =
         `${API_BASE}/fixtures/date/${date}` +
-        `?api_token=${API_KEY}&include=participants;scores&locale=ar`;
+        `?api_token=${API_KEY}&include=participants;league;scores&locale=ar`;
 
       const res = await request(url);
       const raw = await res.body.json();
